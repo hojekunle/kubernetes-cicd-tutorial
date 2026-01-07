@@ -27,32 +27,32 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
       - name: Update GitOps repository
-        shell: bash
+        shell: pwsh
         env:
           GIT_TOKEN: ${{ secrets.GITOPS_PAT }}
         run: |
-          # Configure git credential store
-          git config --global credential.helper store
-          echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
-          
-          # Remove any existing gitops directory
-          rm -rf gitops
-          
-          # Clone repository using HTTPS URL without token
+          # Configure git credentials (Windows)
+          git config --global credential.helper manager-core
+      
+          # Clean up any previous directory
+          if (Test-Path gitops) {
+            Remove-Item -Recurse -Force gitops
+          }
+      
+          # Clone GitOps repo
           git clone https://github.com/hojekunle/grade-api-gitops.git gitops
-          cd gitops
-          
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s|image: ghcr.io/${{ github.repository }}:.*|image: ghcr.io/${{ github.repository }}:${{ github.sha }}|g" deployment.yaml
-          else
-            sed -i "s|image: ghcr.io/${{ github.repository }}:.*|image: ghcr.io/${{ github.repository }}:${{ github.sha }}|g" deployment.yaml
-          fi
-          
-          # Commit changes
+          Set-Location gitops
+      
+          # Update image tag in deployment.yaml
+          $image = "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          (Get-Content deployment.yaml) `
+            -replace 'image:\s*ghcr.io/.+?:.*', "image: $image" |
+            Set-Content deployment.yaml
+      
+          # Commit and push
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+      
           git add deployment.yaml
           git commit -m "Update image to ${{ github.sha }}"
-          
-          # Push
-          git push -f https://${GIT_TOKEN}@github.com/hojekunle/grade-api-gitops.git main
+          git push https://x-access-token:${env:GIT_TOKEN}@github.com/hojekunle/grade-api-gitops.git main
